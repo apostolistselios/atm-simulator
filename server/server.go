@@ -48,7 +48,14 @@ func handleConnection(conn net.Conn) {
 		fmt.Fprintln(conn, err)
 	}
 
-	fmt.Fprintln(conn, "successful log in")
+	fmt.Fprintln(conn, "OK")
+
+	msg, err = bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		log.Println(err)
+	}
+
+	//TODO: split the message and do the proper operation.
 }
 
 func checkUsername(username string) (api.User, error) {
