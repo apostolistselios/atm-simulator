@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 )
 
 func main() {
@@ -14,34 +15,33 @@ func main() {
 	}
 	defer conn.Close()
 
-	fmt.Println("Welcome to the ATM.")
-	username, password, err := getCredentials()
+	fmt.Println("WELCOME TO THE ATM.")
+	username, err := getCredentials()
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(username, password)
+	fmt.Fprintln(conn, username)
 
+	handleResponse(conn)
+}
+
+// getCredentials gets the username from the user and returns it.
+func getCredentials() (string, error) {
+	var username string
+
+	fmt.Print("Username: ")
+	_, err := fmt.Scanf("%s\n", &username)
+	if err != nil {
+		return "", fmt.Errorf("error parsing the username")
+	}
+	return username, nil
+}
+
+// handleResponse handles the response from the server.
+func handleResponse(conn net.Conn) {
 	response, err := bufio.NewReader(conn).ReadString('\n')
 	if err != nil {
 		log.Println(err)
 	}
-	fmt.Println(response)
-}
-
-// getCredentials gets from the user the username and password and returns them.
-func getCredentials() (string, string, error) {
-	var username string
-	var password string
-	fmt.Print("Username: ")
-	_, err := fmt.Scanf("%s\n", &username)
-	if err != nil {
-		return "", "", err
-	}
-	fmt.Print("Password: ")
-	_, err = fmt.Scanf("%s\n", &password)
-	if err != nil {
-		return "", "", err
-	}
-
-	return username, password, nil
+	fmt.Println(strings.Trim(response, "\n"))
 }
