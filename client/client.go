@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -33,28 +34,41 @@ func main() {
 		fmt.Println("2. d/D <amount> to deposit the amount")
 		fmt.Print("Please choose the transaction you would like to do: ")
 
-		var transaction string
+		var tranType string
 		var amount int
-		_, err := fmt.Scanf("%s %d\n", &transaction, &amount)
+		_, err := fmt.Scanf("%s %d\n", &tranType, &amount)
 		if err != nil {
-			log.Println("error", err)
+			log.Println("error incorrect transaction form")
 			continue
 		}
 
-		err = checkTransaction(transaction, amount)
+		// Check if the transaction is in the correct form.
+		err = checkTransaction(tranType, amount)
 		if err != nil {
 			log.Println(err)
 			continue
 		}
 
 		// Send the message to the server. TODO: function sendmsg to server.
-		msg := fmt.Sprintf("%s %d", transaction, amount)
+		msg := fmt.Sprintf("%s %s %d", username, tranType, amount)
 		fmt.Fprintln(conn, msg)
 
 		//TODO: Receive the server response.
+		response := handleResponse(conn)
+		if response != "OK" {
+			fmt.Println(response)
+		} else {
+			fmt.Println("TRANSACTION COMPLETE")
+		}
 
+		// Check if the user wants to continue.
 		fmt.Print("Would you like to continue with another transaction (y/n): ")
 		fmt.Scanf("%s\n", &answer)
+
+		// If not send exit to the server.
+		if answer != "y" {
+			fmt.Fprintln(conn, "exit")
+		}
 	}
 }
 
@@ -65,7 +79,7 @@ func getCredentials() (string, error) {
 	fmt.Print("Username: ")
 	_, err := fmt.Scanf("%s\n", &username)
 	if err != nil {
-		return "", fmt.Errorf("error parsing the username")
+		return "", errors.New("error parsing the username")
 	}
 	return username, nil
 }
@@ -79,13 +93,16 @@ func handleResponse(conn net.Conn) string {
 	return strings.Trim(response, "\n")
 }
 
-func checkTransaction(transaction string, amount int) error {
-	if !(transaction == "w" || transaction == "W" || transaction == "d" || transaction == "D") {
-		return fmt.Errorf("the transaction has to be between w/W or d/D, try again")
+// checkTransaction checks if the transaction is in the correct form.
+// The transaction type (tranType) has to be w/W or d/D.
+// The amount has to be a multiple of 20 or 50.
+func checkTransaction(tranType string, amount int) error {
+	if !(tranType == "w" || tranType == "W" || tranType == "d" || tranType == "D") {
+		return errors.New("the transaction has to be between w/W or d/D, try again")
 	}
 
 	if amount%20 != 0 && amount%50 != 0 {
-		return fmt.Errorf("the amount has to be multiple of 20 or multiple 50, try again")
+		return errors.New("the amount has to be multiple of 20 or multiple 50, try again")
 	}
 	return nil
 }

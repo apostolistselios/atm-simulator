@@ -8,9 +8,8 @@ import (
 	"strings"
 
 	"github.com/apostolistselios/atm-simulator/api"
+	"github.com/boltdb/bolt"
 )
-
-var store *api.Store
 
 func main() {
 	listener, err := net.Listen("tcp", ":8080")
@@ -19,65 +18,59 @@ func main() {
 	}
 	defer listener.Close()
 
-	store, err = api.GetStore("../database.db")
+	database, err := api.GetDatabase("../database.db")
 	if err != nil {
 		log.Fatalf("error connecting to database %s", err)
 	}
-	defer store.Close()
+	defer api.CloseDatabase(database)
 
 	fmt.Println("Server is listening on port:8080...")
-
+	api.ViewUsers(database)
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			fmt.Println(err)
 		}
-		handleConnection(conn)
+		handleConnection(conn, database)
 	}
 }
 
 // handleConnection handles a client once the connection with the server is established
-func handleConnection(conn net.Conn) {
-	msg, err := bufio.NewReader(conn).ReadString('\n')
+func handleConnection(conn net.Conn, database *bolt.DB) {
+	// Receives the username from the client.
+	username, err := bufio.NewReader(conn).ReadString('\n')
 	if err != nil {
 		log.Println(err)
 	}
 
-	_, err = checkUsername(strings.Trim(msg, "\n"))
+	// Check if the username is valid.
+	_, err = api.GetUser(database, strings.Trim(username, "\n"))
 	if err != nil {
 		fmt.Fprintln(conn, err)
 	}
-
 	fmt.Fprintln(conn, "OK")
 
-	msg, err = bufio.NewReader(conn).ReadString('\n')
-	if err != nil {
-		log.Println(err)
+	// Receive transactions.
+	for {
+		msg, err := bufio.NewReader(conn).ReadString('\n')
+		if err != nil {
+			log.Println(err)
+			fmt.Fprintln(conn, err)
+			continue
+		}
+		msg = strings.Trim(msg, "\n")
+
+		if msg == "exit" {
+			break
+		}
+
+		transaction := strings.Split(msg, " ")
+		err = api.UpdateBalance(database, transaction)
+		if err != nil {
+			fmt.Fprintln(conn, err)
+			continue
+		}
+		fmt.Fprintln(conn, "OK")
+		api.ViewUsers(database)
 	}
-
-	//TODO: split the message and do the proper operation.
 }
-
-func checkUsername(username string) (api.User, error) {
-	u, err := store.GetUser(username)
-	return u, err
-}
-
-// func main() {
-// 	store, err := api.GetStore("../database.db")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	_, err = store.GetUser("u")
-// 	if err != nil {
-// 		log.Println(err)
-// 	}
-
-// 	store.ViewUsers()
-// 	err = store.UpdateBalance("user4", 2000, "deposit")
-// 	if err != nil {
-// 		log.Println(err)
-// 	}
-// 	store.ViewUsers()
-// }
