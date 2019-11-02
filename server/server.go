@@ -1,76 +1,62 @@
 package main
 
 import (
-	"bufio"
+	"encoding/json"
 	"fmt"
-	"log"
-	"net"
+	"io/ioutil"
+	"net/http"
 	"strings"
 
 	"github.com/apostolistselios/atm-simulator/api"
-	"github.com/boltdb/bolt"
 )
 
-func main() {
-	listener, err := net.Listen("tcp", ":8080")
-	if err != nil {
-		log.Fatalf("error opening the server %s", err)
-	}
-	defer listener.Close()
+var database = api.GetDatabase("../database.db")
 
-	database, err := api.GetDatabase("../database.db")
+func checkUserHandler(w http.ResponseWriter, req *http.Request) {
+	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		log.Fatalf("error connecting to database %s", err)
+		fmt.Println(err)
 	}
-	defer api.CloseDatabase(database)
-
-	fmt.Println("Server is listening on port:8080...")
-	api.ViewUsers(database)
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			fmt.Println(err)
-		}
-		handleConnection(conn, database)
+	username := string(body)
+	err = checkUsername(username)
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
 	}
+	fmt.Fprint(w, "OK")
 }
 
-// handleConnection handles a client once the connection with the server is established
-func handleConnection(conn net.Conn, database *bolt.DB) {
-	// Receives the username from the client.
-	username, err := bufio.NewReader(conn).ReadString('\n')
+func transactionHandler(w http.ResponseWriter, req *http.Request) {
+	var transaction api.Transaction
+	if req.Body == nil {
+		http.Error(w, "error send a request body", 400)
+		return
+	}
+
+	err := json.NewDecoder(req.Body).Decode(&transaction)
 	if err != nil {
-		log.Println(err)
+		http.Error(w, err.Error(), 400)
+		return
 	}
 
-	// Check if the username is valid.
-	_, err = api.GetUser(database, strings.Trim(username, "\n"))
+	err = api.UpdateBalance(database, transaction)
 	if err != nil {
-		fmt.Fprintln(conn, err)
+		http.Error(w, err.Error(), 400)
+		return
 	}
-	fmt.Fprintln(conn, "OK")
+	fmt.Fprint(w, "OK")
+	api.ViewUsers(database)
+}
 
-	// Receive transactions.
-	for {
-		msg, err := bufio.NewReader(conn).ReadString('\n')
-		if err != nil {
-			log.Println(err)
-			fmt.Fprintln(conn, err)
-			continue
-		}
-		msg = strings.Trim(msg, "\n")
+func main() {
+	api.ViewUsers(database)
+	router := http.NewServeMux()
+	router.HandleFunc("/atm/user", checkUserHandler)
+	router.HandleFunc("/atm/user/transaction", transactionHandler)
+	http.ListenAndServe(":8080", router)
+}
 
-		if msg == "exit" {
-			break
-		}
-
-		transaction := strings.Split(msg, " ")
-		err = api.UpdateBalance(database, transaction)
-		if err != nil {
-			fmt.Fprintln(conn, err)
-			continue
-		}
-		fmt.Fprintln(conn, "OK")
-		api.ViewUsers(database)
-	}
+func checkUsername(username string) error {
+	_, err := api.GetUser(database, strings.Trim(username, "\n"))
+	return err
 }
