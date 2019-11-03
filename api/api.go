@@ -42,36 +42,25 @@ func ExecuteTransaction(db *bolt.DB, transaction Transaction) error {
 	return db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte("users"))
 		value := bucket.Get([]byte(transaction.UserID))
-		if value == nil {
-			return fmt.Errorf("error User: %s doesn't exist", transaction.UserID)
-		}
 
 		var u User
-		err := json.Unmarshal(value, &u)
-		if err != nil {
-			return fmt.Errorf("error decoding User: %s", transaction.UserID)
-		}
-
+		json.Unmarshal(value, &u)
 		if transaction.Type == "w" {
-			if err = checkWithdrawal(&u, &transaction); err != nil {
+			if err := processWithdrawal(&u, &transaction); err != nil {
 				return err
 			}
 		} else if transaction.Type == "d" {
 			u.Balance += transaction.Amount
 		}
-
-		encodedUser, err := json.Marshal(u)
-		if err != nil {
-			return fmt.Errorf("error encoding User: %s", transaction.UserID)
-		}
+		encodedUser, _ := json.Marshal(u)
 		return bucket.Put([]byte(transaction.UserID), encodedUser)
 	})
 }
 
-// checkWithdrawal makes the required checks in order for the withdrawal to be carried on.
+// processWithdrawal makes the required checks in order for the withdrawal to be carried on.
 // If the checks pass the User is prepared and the withdrawal is ready to be executed.
 // If an error occurs it returns the error, else it returns nil.
-func checkWithdrawal(u *User, transaction *Transaction) error {
+func processWithdrawal(u *User, transaction *Transaction) error {
 	currDay := time.Now().Day()
 	if u.Balance > 0 && u.Balance-transaction.Amount >= 0 {
 		if currDay == u.LastWithdrawalDay && u.AmountWithdrawed+transaction.Amount > u.WithdrawalLimit {
@@ -100,14 +89,24 @@ func GetUser(db *bolt.DB, username string) (User, error) {
 			return fmt.Errorf("error User: %s doesn't exist", username)
 		}
 
-		err := json.Unmarshal(value, &u)
-		if err != nil {
-			return fmt.Errorf("error decoding User: %s", username)
-		}
+		json.Unmarshal(value, &u)
 		return nil
 	})
 
 	return u, err
+}
+
+// GetBalance returns the balance of the specific user.
+func GetBalance(db *bolt.DB, username string) (int, error) {
+	var u User
+	err := db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte("users"))
+		value := bucket.Get([]byte(username))
+
+		json.Unmarshal(value, &u)
+		return nil
+	})
+	return u.Balance, err
 }
 
 // ViewUsers prints all the users in the console.
