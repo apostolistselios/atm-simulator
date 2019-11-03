@@ -12,6 +12,9 @@ import (
 
 var database = api.GetDatabase("../database.db")
 
+// checkUserHandler handles requests on /atm/user and checks if the user
+// received from the request exists in the database. If yes sends back "OK"
+// if not sends an http req with status code 400 and the error that occured.
 func checkUserHandler(w http.ResponseWriter, req *http.Request) {
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
@@ -26,6 +29,10 @@ func checkUserHandler(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprint(w, "OK")
 }
 
+// transactionHandler handles requests on /atm/user/transaction.
+// Executes the transaction that is sent by the user on the database.
+// If the transaction succeeds sends back "OK", if not sends an http req
+// with status code 400 and the error that occured.
 func transactionHandler(w http.ResponseWriter, req *http.Request) {
 	var transaction api.Transaction
 	if req.Body == nil {
@@ -39,7 +46,7 @@ func transactionHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = api.UpdateBalance(database, transaction)
+	err = api.ExecuteTransaction(database, transaction)
 	if err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -56,6 +63,7 @@ func main() {
 	http.ListenAndServe(":8080", router)
 }
 
+// checkUsername checks if the specific username exists in the database.
 func checkUsername(username string) error {
 	_, err := api.GetUser(database, strings.Trim(username, "\n"))
 	return err

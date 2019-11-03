@@ -25,8 +25,8 @@ func main() {
 	if err != nil {
 		log.Println(err)
 	}
-	err = handleResponse(resp)
-	if err != nil {
+
+	if err := handleResponse(resp); err != nil {
 		log.Fatal(err)
 	}
 
@@ -38,15 +38,13 @@ func main() {
 
 		var tranType string
 		var amount int
-		_, err := fmt.Scanf("%s %d\n", &tranType, &amount)
-		if err != nil {
+		if _, err := fmt.Scanf("%s %d\n", &tranType, &amount); err != nil {
 			log.Println("error incorrect transaction form")
 			continue
 		}
 
 		// Check if the transaction is in the correct form.
-		err = checkTransaction(tranType, amount)
-		if err != nil {
+		if err := checkTransaction(tranType, amount); err != nil {
 			log.Println(err)
 			continue
 		}
@@ -60,8 +58,7 @@ func main() {
 
 		// Encode the transaction object.
 		buffer := new(bytes.Buffer)
-		err = json.NewEncoder(buffer).Encode(transaction)
-		if err != nil {
+		if err := json.NewEncoder(buffer).Encode(transaction); err != nil {
 			log.Println(err)
 			continue
 		}
@@ -74,15 +71,14 @@ func main() {
 		}
 
 		// Handle the server response.
-		err = handleResponse(resp)
-		if err != nil {
+		if err := handleResponse(resp); err != nil {
 			log.Println(err)
 		} else {
 			fmt.Println("TRANSACTION COMPLETE")
 		}
 
 		// Check if the user wants to continue.
-		fmt.Print("WOULD YOU LIKE TO CONTINUE OR EXIT (Y/N): ")
+		fmt.Print("WOULD YOU LIKE TO CONTINUE (Y/N): ")
 		fmt.Scanf("%s\n", &answer)
 	}
 }
@@ -90,10 +86,8 @@ func main() {
 // getCredentials gets the username from the user and returns it.
 func getCredentials() (string, error) {
 	var username string
-
-	fmt.Print("Username: ")
-	_, err := fmt.Scanf("%s\n", &username)
-	if err != nil {
+	fmt.Print("USERNAME: ")
+	if _, err := fmt.Scanf("%s\n", &username); err != nil {
 		return "", errors.New("error parsing the username")
 	}
 	return username, nil
