@@ -15,16 +15,48 @@ import (
 
 func main() {
 	fmt.Println("WELCOME TO THE ATM.")
-	username, err := getCredentials()
+	userID, err := getCredentials()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// Make the user request to the server.
-	if err := requestToUser(username); err != nil {
+	if err := verifyUser(userID); err != nil {
 		log.Fatal(err)
 	}
 
+	// The main loop of the client starts.
+	mainLoop(userID)
+}
+
+// getCredentials gets the userID from the user and returns it.
+func getCredentials() (string, error) {
+	var userID string
+	fmt.Print("USER ID: ")
+	if _, err := fmt.Scanf("%s\n", &userID); err != nil {
+		return "", errors.New("error parsing the user ID")
+	}
+	return userID, nil
+}
+
+// verifyUser makes a HTTP request to /atm/{id} and handles the response.
+func verifyUser(userID string) error {
+	url := "http://localhost:8080/atm/" + userID
+	resp, err := http.Get(url)
+	if err != nil {
+		log.Println(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 400 {
+		data, _ := ioutil.ReadAll(resp.Body)
+		return errors.New(string(data))
+	}
+	return nil
+}
+
+// mainLoop executes the main loop of the client.
+func mainLoop(userID string) {
 	answer := "y"
 	for answer == "y" || answer == "Y" {
 		userPrompt()
@@ -51,25 +83,28 @@ func main() {
 
 			// Make the transaction object.
 			transaction := api.Transaction{
-				UserID: username,
+				UserID: userID,
 				Type:   choice,
 				Amount: amount,
 			}
 
 			// Make the transaction request to the server.
-			if err := requestToTransaction(transaction); err != nil {
+			if err := requestTransaction(transaction); err != nil {
 				log.Println(err)
 				continue
 			}
 			fmt.Println("TRANSACTION COMPLETE")
-		} else {
+		} else if choice == "b" {
 			// Make the balance request to the server.
-			balance, err := requestToBalance(username)
+			balance, err := requestBalance(userID)
 			if err != nil {
 				log.Println(err)
 				continue
 			}
 			fmt.Println("YOUR BALANCE IS:", balance)
+		} else if choice == "e" {
+			fmt.Println("BYE BYE")
+			break
 		}
 		// Check if the user wants to continue.
 		fmt.Print("WOULD YOU LIKE TO CONTINUE (Y/N): ")
@@ -77,44 +112,19 @@ func main() {
 	}
 }
 
-// getCredentials gets the username from the user and returns it.
-func getCredentials() (string, error) {
-	var username string
-	fmt.Print("USERNAME: ")
-	if _, err := fmt.Scanf("%s\n", &username); err != nil {
-		return "", errors.New("error parsing the username")
-	}
-	return username, nil
-}
-
-// requestToUser makes a HTTP request to /atm/user and handles the response.
-func requestToUser(username string) error {
-	url := "http://localhost:8080/atm/user"
-	resp, err := http.Post(url, "text/plain", strings.NewReader(username))
-	if err != nil {
-		log.Println(err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 400 {
-		data, _ := ioutil.ReadAll(resp.Body)
-		return errors.New(string(data))
-	}
-	return nil
-}
-
 func userPrompt() {
 	fmt.Println("1. W TO WITHDRAW AN AMOUNT")
 	fmt.Println("2. D TO DEPOSIT AN AMOUNT")
 	fmt.Println("3. B TO SEE YOUR BALANCE")
+	fmt.Println("4. E TO EXIT")
 	fmt.Print("PLEASE CHOOSE THE TYPE A TYPE OF TRANSACTION: ")
 }
 
 // checkTransaction checks if the transaction is in the correct form.
-// The transaction type (tranType) has to be w/W or d/D.
+// The transaction type (ttype) has to be w/W or d/D.
 // The amount has to be a multiple of 20 or 50.
-func checkTransaction(tranType string, amount int) error {
-	if !(tranType == "w" || tranType == "W" || tranType == "d" || tranType == "D") {
+func checkTransaction(ttype string, amount int) error {
+	if !(ttype == "w" || ttype == "W" || ttype == "d" || ttype == "D") {
 		return errors.New("the transaction has to be between w/W or d/D, try again")
 	}
 
@@ -124,17 +134,14 @@ func checkTransaction(tranType string, amount int) error {
 	return nil
 }
 
-// requestToTransaction makes a HTTP request to /atm/user/transaction and handles the response.
-func requestToTransaction(transaction api.Transaction) error {
+// requestTransaction makes a HTTP request to /atm/{id}/transaction and handles the response.
+func requestTransaction(transaction api.Transaction) error {
 	// Encode the transaction object.
-	buffer := new(bytes.Buffer)
-	if err := json.NewEncoder(buffer).Encode(transaction); err != nil {
-		return err
-	}
+	encodedTrans, _ := json.Marshal(transaction)
 
 	// Make the server request.
-	url := "http://localhost:8080/atm/user/transaction"
-	resp, err := http.Post(url, "application/json", buffer)
+	url := "http://localhost:8080/atm/" + transaction.UserID + "/transaction"
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(encodedTrans))
 	if err != nil {
 		log.Println(err)
 	}
@@ -147,10 +154,10 @@ func requestToTransaction(transaction api.Transaction) error {
 	return nil
 }
 
-// requestToBalance makes a HTTP request to /atm/user/balance and handles the response.
-func requestToBalance(username string) (string, error) {
-	url := "http://localhost:8080/atm/user/balance"
-	resp, err := http.Post(url, "text/plain", strings.NewReader(username))
+// requestBalance makes a HTTP request to /atm/{id}/balance and handles the response.
+func requestBalance(userID string) (string, error) {
+	url := "http://localhost:8080/atm/" + userID + "/balance"
+	resp, err := http.Get(url)
 	if err != nil {
 		log.Println(err)
 	}

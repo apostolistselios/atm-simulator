@@ -11,20 +11,21 @@ import (
 
 // User struct
 type User struct {
-	Balance int
+	ID      string `json:"userID"`
+	Balance int    `json:"balance"`
 	// Daily withdraw limit.
-	WithdrawalLimit int
+	WithdrawalLimit int `json:"withdrawalLimit"`
 	// Amount withdrawed the current day.
-	AmountWithdrawed int
+	AmountWithdrawed int `json:"amountWithdrawed"`
 	// The day the last withdraw transaction happened.
-	LastWithdrawalDay int
+	LastWithdrawalDay int `json:"lastWithdrawalDay"`
 }
 
 // Transaction struct
 type Transaction struct {
-	UserID string
-	Type   string
-	Amount int
+	UserID string `json:"userID"`
+	Type   string `json:"type"`
+	Amount int    `json:"amount"`
 }
 
 // GetDatabase returns a Database object and error.
@@ -38,70 +39,67 @@ func GetDatabase(path string) *bolt.DB {
 
 // ExecuteTransaction updates the balance of the user with that specific username.
 // transaction slice [username, tranType, amount]
-func ExecuteTransaction(db *bolt.DB, transaction Transaction) error {
+func ExecuteTransaction(db *bolt.DB, t Transaction) error {
 	return db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte("users"))
-		value := bucket.Get([]byte(transaction.UserID))
+		value := bucket.Get([]byte(t.UserID))
 
 		var u User
 		json.Unmarshal(value, &u)
-		if transaction.Type == "w" {
-			if err := processWithdrawal(&u, &transaction); err != nil {
+		if t.Type == "w" {
+			if err := processWithdrawal(&u, &t); err != nil {
 				return err
 			}
-		} else if transaction.Type == "d" {
-			u.Balance += transaction.Amount
+		} else if t.Type == "d" {
+			u.Balance += t.Amount
 		}
 		encodedUser, _ := json.Marshal(u)
-		return bucket.Put([]byte(transaction.UserID), encodedUser)
+		return bucket.Put([]byte(t.UserID), encodedUser)
 	})
 }
 
 // processWithdrawal makes the required checks in order for the withdrawal to be carried on.
 // If the checks pass the User is prepared and the withdrawal is ready to be executed.
 // If an error occurs it returns the error, else it returns nil.
-func processWithdrawal(u *User, transaction *Transaction) error {
+func processWithdrawal(u *User, t *Transaction) error {
 	currDay := time.Now().Day()
-	if u.Balance > 0 && u.Balance-transaction.Amount >= 0 {
-		if currDay == u.LastWithdrawalDay && u.AmountWithdrawed+transaction.Amount > u.WithdrawalLimit {
+	if u.Balance > 0 && u.Balance-t.Amount >= 0 {
+		if currDay == u.LastWithdrawalDay && u.AmountWithdrawed+t.Amount > u.WithdrawalLimit {
 			return fmt.Errorf("error withdrawal limit, Daily Limit: %d", u.WithdrawalLimit)
 		} else if currDay == u.LastWithdrawalDay {
-			u.Balance -= transaction.Amount
-			u.AmountWithdrawed += transaction.Amount
+			u.Balance -= t.Amount
+			u.AmountWithdrawed += t.Amount
 		} else {
-			u.Balance -= transaction.Amount
-			u.AmountWithdrawed = transaction.Amount
+			u.Balance -= t.Amount
+			u.AmountWithdrawed = t.Amount
 			u.LastWithdrawalDay = currDay
 		}
 	} else {
-		return fmt.Errorf("error high withdrawal amount, User: %s Balance: %d", transaction.UserID, u.Balance)
+		return fmt.Errorf("error high withdrawal amount, User: %s Balance: %d", t.UserID, u.Balance)
 	}
 	return nil
 }
 
-// GetUser returns the User with that specific username.
-func GetUser(db *bolt.DB, username string) (User, error) {
-	var u User
+// CheckUserID checks if that specific userID exists in the database.
+// If not returns an error.
+func CheckUserID(db *bolt.DB, userID string) error {
 	err := db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte("users"))
-		value := bucket.Get([]byte(username))
+		value := bucket.Get([]byte(userID))
 		if value == nil {
-			return fmt.Errorf("error User: %s doesn't exist", username)
+			return fmt.Errorf("error User: %s doesn't exist", userID)
 		}
-
-		json.Unmarshal(value, &u)
 		return nil
 	})
-
-	return u, err
+	return err
 }
 
 // GetBalance returns the balance of the specific user.
-func GetBalance(db *bolt.DB, username string) (int, error) {
+func GetBalance(db *bolt.DB, userID string) (int, error) {
 	var u User
 	err := db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte("users"))
-		value := bucket.Get([]byte(username))
+		value := bucket.Get([]byte(userID))
 
 		json.Unmarshal(value, &u)
 		return nil
@@ -124,15 +122,15 @@ func ViewUsers(db *bolt.DB) {
 }
 
 // // InsertUser inserts a user into the boltDB.
-// func InsertUser(db *bolt.DB, username string, balance int, limit int, amount int, day int) error {
-// 	u := User{balance, limit, amount, day}
+// func InsertUser(db *bolt.DB, userID string, balance int, limit int, amount int, day int) error {
+// 	u := User{userID, balance, limit, amount, day}
 
 // 	return db.Update(func(tx *bolt.Tx) error {
-// 		bucket := tx.Bucket([]byte("users"))
+// 		bucket, err := tx.CreateBucketIfNotExists([]byte("users"))
 // 		encodedUser, err := json.Marshal(u)
 // 		if err != nil {
-// 			return fmt.Errorf("error encoding User: %s", username)
+// 			return fmt.Errorf("error encoding User: %s", userID)
 // 		}
-// 		return bucket.Put([]byte(username), encodedUser)
+// 		return bucket.Put([]byte(u.ID), encodedUser)
 // 	})
 // }
